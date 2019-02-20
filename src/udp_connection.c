@@ -29,7 +29,7 @@ void on_udp_close_cb(uv_handle_t *handle)
 	udp_conn_t *conn = (udp_conn_t *)handle->data;
 	HB_MEM_RELEASE(handle);
 	conn->state = CS_DISCONNECTED;
-	conn->stream = NULL;
+	conn->udp = NULL;
 }
 
 // this callback is registered by uv_start_read
@@ -51,14 +51,14 @@ static void on_udp_alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t
 // this callback is registered by uv_start_read
 // flow: udp_connect_begin:uv_udp_connect -> on_connect_cb:uv_start_read -> on_read_cb
 // --------------------------------------------------------------------------------------------------------------
-void on_udp_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
+void on_udp_read_cb(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags)
 {
 #ifdef UV_THREAD_HANDLE_DEBUG
 	printf("%s -- %lu -- handle: %p -- buf: %p\n", __FUNCTION__, uv_thread_self(), tcp, buf->base);
 #endif
 
 	int should_close = 0;
-	udp_conn_t *conn = (udp_conn_t *)stream->data;
+	udp_conn_t *conn = (udp_conn_t *)req->data;
 
 	// TODO: determine if 0 bytes is a graceful close which is usually standard
 	if (nread >= 0) {
@@ -75,60 +75,60 @@ void on_udp_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 	if (should_close) udp_conn_disconnect(conn);
 }
 
-// this callback is registered by uv_udp_connect
-// flow: udp_connect_begin:uv_udp_connect -> on_connect_cb
-// --------------------------------------------------------------------------------------------------------------
-void on_udp_connect_cb(uv_connect_t *connection, int status)
-{
-#ifdef UV_THREAD_HANDLE_DEBUG
-	printf("%s -- %lu -- uv_connect_t: %p -- handle: %p\n", __FUNCTION__, uv_thread_self(), connection, connection->handle);
-#endif
-
-	int ret;
-	udp_conn_t *conn = (udp_conn_t *)connection->data;
-
-	if (status < 0) {
-		conn->state = CS_DISCONNECTED;
-		hb_log_uv_error(status);
-		HB_MEM_RELEASE(connection);
-		return;
-	}
-
-	//int nlen;
-	//struct sockaddr_storage local;
-	//struct sockaddr_in *plocal = (struct sockaddr_in *)&local;
-	//nlen = sizeof(local);
-	//if ((ret = uv_udp_getsockname((uv_udp_t *)connection->handle, (struct sockaddr *)plocal, &nlen))) {
-	//	PRINTERRCODE(ret);
-	//	udp_conn_disconnect(conn);
-	//}
-
-	//struct sockaddr_storage peer;
-	//struct sockaddr_in *ppeer = (struct sockaddr_in *)&peer;
-	//nlen = sizeof(peer);
-	//if ((ret = uv_udp_getpeername((uv_udp_t *)connection->handle, (struct sockaddr *)ppeer, &nlen))) {
-	//	PRINTERRCODE(ret);
-	//	udp_conn_disconnect(conn);
-	//}
-
-	conn->state = CS_CONNECTED;
-	conn->stream = connection->handle;
-	conn->stream->data = (void *)conn;
-	//memcpy(&conn->local_ip, &plocal->sin_addr, sizeof(uint32_t));
-	//conn->local_port = ntohs(plocal->sin_port);
-	//memcpy(&conn->peer_ip, &ppeer->sin_addr, sizeof(uint32_t));
-	//conn->peer_port = ntohs(ppeer->sin_port);
-	HB_MEM_RELEASE(connection);
-	if ((ret = uv_read_start(conn->stream, on_udp_alloc_cb, on_udp_read_cb))) {
-		hb_log_uv_error(ret);
-		udp_conn_disconnect(conn);
-	}
-}
+//// this callback is registered by uv_udp_connect
+//// flow: udp_connect_begin:uv_udp_connect -> on_connect_cb
+//// --------------------------------------------------------------------------------------------------------------
+//void on_udp_connect_cb(uv_connect_t *connection, int status)
+//{
+//#ifdef UV_THREAD_HANDLE_DEBUG
+//	printf("%s -- %lu -- uv_connect_t: %p -- handle: %p\n", __FUNCTION__, uv_thread_self(), connection, connection->handle);
+//#endif
+//
+//	int ret;
+//	udp_conn_t *conn = (udp_conn_t *)connection->data;
+//
+//	if (status < 0) {
+//		conn->state = CS_DISCONNECTED;
+//		hb_log_uv_error(status);
+//		HB_MEM_RELEASE(connection);
+//		return;
+//	}
+//
+//	//int nlen;
+//	//struct sockaddr_storage local;
+//	//struct sockaddr_in *plocal = (struct sockaddr_in *)&local;
+//	//nlen = sizeof(local);
+//	//if ((ret = uv_udp_getsockname((uv_udp_t *)connection->handle, (struct sockaddr *)plocal, &nlen))) {
+//	//	PRINTERRCODE(ret);
+//	//	udp_conn_disconnect(conn);
+//	//}
+//
+//	//struct sockaddr_storage peer;
+//	//struct sockaddr_in *ppeer = (struct sockaddr_in *)&peer;
+//	//nlen = sizeof(peer);
+//	//if ((ret = uv_udp_getpeername((uv_udp_t *)connection->handle, (struct sockaddr *)ppeer, &nlen))) {
+//	//	PRINTERRCODE(ret);
+//	//	udp_conn_disconnect(conn);
+//	//}
+//
+//	conn->state = CS_CONNECTED;
+//	conn->udp = connection->handle;
+//	conn->udp->data = (void *)conn;
+//	//memcpy(&conn->local_ip, &plocal->sin_addr, sizeof(uint32_t));
+//	//conn->local_port = ntohs(plocal->sin_port);
+//	//memcpy(&conn->peer_ip, &ppeer->sin_addr, sizeof(uint32_t));
+//	//conn->peer_port = ntohs(ppeer->sin_port);
+//	HB_MEM_RELEASE(connection);
+//	if ((ret = uv_read_start(conn->udp, on_udp_alloc_cb, on_udp_read_cb))) {
+//		hb_log_uv_error(ret);
+//		udp_conn_disconnect(conn);
+//	}
+//}
 
 // this callback is registered by uv_write
 // flow: udp_write_begin:uv_write -> on_write_cb
 // --------------------------------------------------------------------------------------------------------------
-void on_udp_write_cb(uv_write_t *req, int status)
+void on_udp_write_cb(uv_udp_send_t *req, int status)
 {
 	int should_close = 0;
 	udp_write_data_t *wdata = (udp_write_data_t *)req->data;
@@ -164,17 +164,21 @@ void on_udp_write_cb(uv_write_t *req, int status)
 // TODO: return int status code
 // TODO: cleanup memory on error
 // --------------------------------------------------------------------------------------------------------------
-void udp_write_begin(uv_stream_t *stream, char *data, int len)
+void udp_write_begin(uv_udp_t *udp, char *data, int len, unsigned flags)
 {
 	int ret;
 	// TODO: return error codes for all of the critical failures below
-	if (!stream) return;
-	if (!stream->data) return;
+	if (!udp) return;
+	if (!udp->data) return;
 	if (!data) return;
 	if (!len) return;
 
-	udp_conn_t *conn = (udp_conn_t *)stream->data;
-	if (conn->state != CS_CONNECTED) return;
+	udp_conn_t *conn = (udp_conn_t *)udp->data;
+	if (conn->state == CS_CONNECTING) {
+		conn->state = CS_CONNECTED;
+	} else if (conn->state != CS_CONNECTED) {
+		return;
+	}
 
 	// max we could prepend would be 8 bytes for 64 bit int
 	struct aws_byte_buf bb_data;
@@ -243,21 +247,22 @@ void udp_write_begin(uv_stream_t *stream, char *data, int len)
 	wdata->buf->len = UV_BUFLEN_CAST(bb_data.len);
 
 	// write_req_t *wr = (write_req_t *)HB_MEM_ACQUIRE(sizeof(write_req_t *));
-	uv_write_t *wreq = HB_MEM_ACQUIRE(sizeof(uv_write_t));
-	if (!wreq) {
+	uv_udp_send_t *send_req = HB_MEM_ACQUIRE(sizeof(*send_req));
+	//uv_write_t *wreq = HB_MEM_ACQUIRE(sizeof(uv_write_t));
+	if (!send_req) {
 		hb_log_error("failed to allocate uv_write_t");
 		return;
 	}
-	wreq->data = (void *)wdata;
+	send_req->data = (void *)wdata;
 	//wreq->send_handle
 
 #ifdef UV_THREAD_HANDLE_DEBUG
 	printf("%s -- %lu -- uv_write_t: %p -- handle: %p -- buf: %p\n", __FUNCTION__, uv_thread_self(), wreq, stream, wbuf->base);
 #endif
 
-	if ((ret = uv_write(wreq, stream, wdata->buf, 1, on_udp_write_cb))) {
+	if ((ret = uv_udp_send(send_req, udp, wdata->buf, 1, (const struct sockaddr *)&conn->sockstr, on_udp_write_cb))) {
 		hb_log_uv_error(ret);
-		udp_conn_disconnect((udp_conn_t *)stream->data);
+		udp_conn_disconnect((udp_conn_t *)udp->data);
 		return;
 	}
 }
@@ -272,19 +277,42 @@ int udp_connect_begin(udp_conn_t *conn, const char *host, int port)
 
 	if (!conn) return EINVAL;
 	if (conn->state != CS_NEW && conn->state != CS_DISCONNECTED) return EINVAL;
-	if (conn->stream != NULL) return EINVAL;
 	if (!SAFE_UDP_CTX(conn->ctx)) return EINVAL;
 	if (!(loop = udp_context_get_loop(conn->ctx))) return EINVAL;
 
-	uv_udp_t *socket = HB_MEM_ACQUIRE(sizeof(uv_udp_t));
-	if (!socket) {
+	conn->udp = HB_MEM_ACQUIRE(sizeof(*conn->udp));
+	if (!conn->udp) {
 		hb_log_error("failed to allocate uv_udp_t");
 		return ENOMEM;
 	}
 
-	if ((ret = uv_udp_init(loop, socket))) {
+	if ((ret = uv_udp_init(loop, conn->udp))) {
 		hb_log_uv_error(ret);
 		return ret;
+	}
+	conn->udp->data = conn;
+
+	if ((ret = uv_ip6_addr(host, port, (struct sockaddr_in6 *)&conn->sockstr))) {
+		if ((ret = uv_ip4_addr(host, port, (struct sockaddr_in *)&conn->sockstr))) {
+			hb_log_uv_error(ret);
+			return ret;
+		}
+	}
+
+	struct sockaddr_storage localaddr;
+	if ((ret = uv_ip4_addr(host, port, (struct sockaddr_in *)&localaddr))) {
+		hb_log_uv_error(ret);
+		return ret;
+	}
+
+	if ((ret = uv_udp_bind(conn->udp, (const struct sockaddr *)&localaddr, 0))) {
+		hb_log_uv_error(ret);
+		return HB_ERROR;
+	}
+
+	if ((ret = uv_udp_recv_start(conn->udp, on_udp_alloc_cb, on_udp_read_cb))) {
+		hb_log_uv_error(UV_ENOMEM);
+		return HB_ERROR;
 	}
 
 	struct sockaddr_storage dest;
@@ -295,21 +323,22 @@ int udp_connect_begin(udp_conn_t *conn, const char *host, int port)
 		}
 	}
 
-	char ipbuf[255];
-	memset(&ipbuf, 0, sizeof(ipbuf));
+	char addr_peer[255], addr_local[255];
+	memset(&addr_peer, 0, 255);
+	memset(&addr_local, 0, 255);
 	if (dest.ss_family == AF_INET6) {
-		uv_ip6_name((struct sockaddr_in6 *)&dest, ipbuf, sizeof(ipbuf));
+		uv_ip6_name((struct sockaddr_in6 *)&dest, addr_peer, sizeof(addr_peer));
 	} else if (dest.ss_family == AF_INET) {
-		uv_ip4_name((struct sockaddr_in *)&dest, ipbuf, sizeof(ipbuf));
+		uv_ip4_name((struct sockaddr_in *)&dest, addr_peer, sizeof(addr_peer));
 	} else {
-		return 1;
+		return HB_ERROR;
 	}
 	//printf("Conecting to %s:%d\n", ipbuf, port);
 
 	uv_connect_t *connection = HB_MEM_ACQUIRE(sizeof(uv_connect_t));
 	if (!connection) {
 		hb_log_error("failed to allocate uv_connect_t");
-		return ENOMEM;
+		return HB_ERROR;
 	}
 
 #ifdef UV_THREAD_HANDLE_DEBUG
@@ -324,7 +353,7 @@ int udp_connect_begin(udp_conn_t *conn, const char *host, int port)
 	//	return ret;
 	//}
 
-	return 0;
+	return HB_SUCCESS;
 }
 
 // --------------------------------------------------------------------------------------------------------------
@@ -373,11 +402,11 @@ void udp_conn_disconnect(udp_conn_t *conn)
 {
 	if (!conn) return;
 	if (conn->state == CS_DISCONNECTED || conn->state == CS_DISCONNECTING) return;
-	if (!conn->stream) return;
+	if (!conn->udp) return;
 
-	if (!uv_is_closing((uv_handle_t *)conn->stream)) {
+	if (!uv_is_closing((uv_handle_t *)conn->udp)) {
 		conn->state = CS_DISCONNECTING;
-		uv_close((uv_handle_t *)conn->stream, on_udp_close_cb);
+		uv_close((uv_handle_t *)conn->udp, on_udp_close_cb);
 	}
 }
 

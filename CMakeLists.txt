@@ -73,8 +73,8 @@ set(UDP_LOADGEN_SRCS
 	src/udplg/udplg.c
 	include/udplg/cmdargs.h
 )
-#add_executable(udplg ${UDP_LOADGEN_SRCS})
-#target_link_libraries(udplg ${UDP_LINK_LIBS})
+add_executable(udplg ${UDP_LOADGEN_SRCS})
+target_link_libraries(udplg ${UDP_LINK_LIBS})
 
 
 #

@@ -24,7 +24,8 @@ typedef enum connection_state_e {
 
 typedef struct udp_conn_s {
 	udp_ctx_t *ctx;
-	uv_stream_t *stream;
+	uv_udp_t *udp;
+	struct sockaddr_storage sockstr;
 	int32_t read_err;
 	int32_t write_err;
 	int32_t state;
@@ -36,12 +37,12 @@ typedef struct udp_conn_s {
 /* uv callbacks */
 void on_udp_close_cb(uv_handle_t *handle);
 static void on_udp_alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
-void on_udp_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf);
-void on_udp_connect_cb(uv_connect_t *connection, int status);
-void on_udp_write_cb(uv_write_t *req, int status);
+void on_udp_read_cb(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags);
+//void on_udp_connect_cb(uv_connect_t *connection, int status);
+void on_udp_write_cb(uv_udp_send_t *req, int status);
 
 /* uv interface functions */
-void udp_write_begin(uv_stream_t *stream, char *data, int len);
+void udp_write_begin(uv_udp_t *udp, char *data, int len, unsigned flags);
 int udp_connect_begin(udp_conn_t *conn, const char *host, int port);
 
 /* connection and state management */

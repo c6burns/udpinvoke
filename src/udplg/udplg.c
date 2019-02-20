@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include <limits.h>
 
-// statically build dependency includes
+// statically built dependency includes
 #include "aws/common/atomics.h"
 #include "aws/common/byte_buf.h"
 #include "aws/common/array_list.h"
@@ -112,6 +112,7 @@ void on_tick_cb(uv_timer_t *req)
 
 			if (conns_made >= conns_max) continue;
 			udp_connect_begin(&g_udp_conns[i], cmdline_args.host, cmdline_args.port);
+			udp_write_begin(g_udp_conns[i].udp, cmdline_args.message, cmdline_args.msglen, 0);
 			conns_made++;
 		}
 
@@ -139,6 +140,7 @@ void on_tick_cb(uv_timer_t *req)
 				do_connect = 1;
 			} else if (g_udp_conns[i].state == CS_CONNECTING) {
 				failed++;
+				do_send = 1;
 			} else if (g_udp_conns[i].state == CS_CONNECTED) {
 				connected++;
 				do_send = 1;
@@ -153,7 +155,7 @@ void on_tick_cb(uv_timer_t *req)
 			if (do_connect && conns_made < conns_max) {
 				udp_connect_begin(&g_udp_conns[i], cmdline_args.host, cmdline_args.port);
 			} else if (do_send) {
-				udp_write_begin(g_udp_conns[i].stream, cmdline_args.message, cmdline_args.msglen);
+				udp_write_begin(g_udp_conns[i].udp, cmdline_args.message, cmdline_args.msglen, 0);
 			}
 			conns_made++;
 		}
@@ -248,7 +250,7 @@ int main(int argc, char **argv)
 	}
 
 	if ((ret = uv_tty_set_mode(&g_tty, 0))) {
-		hb_log_uv_error(ret);
+		//hb_log_uv_error(ret);
 	}
 
 	tty_setmode_success = 1;

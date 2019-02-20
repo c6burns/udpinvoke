@@ -44,47 +44,44 @@ void on_close(uv_handle_t* handle)
 	HB_MEM_RELEASE(handle);
 }
 
-void echo_write(uv_write_t *req, int status)
+void echo_write(uv_udp_send_t *req, int status)
 {
 	if (status) {
-		fprintf(stderr, "Write error %s\n", uv_strerror(status));
+		hb_log_uv_error(status);
 	}
-	free_write_req(req);
+	free_write_req((uv_write_t *)req);
 }
 
-void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf)
+void echo_read(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags)
 {
-	if (nread > 0) {
-		write_req_t *req = (write_req_t*)HB_MEM_ACQUIRE(sizeof(write_req_t));
-		req->buf = uv_buf_init(buf->base, (unsigned int)nread);
-		uv_write((uv_write_t*)req, client, &req->buf, 1, echo_write);
-		return;
-	}
 	if (nread < 0) {
-		if (nread != UV_EOF)
-			fprintf(stderr, "Read error %s\n", uv_err_name((int)nread));
-		uv_close((uv_handle_t*)client, on_close);
-	}
-
-	HB_MEM_RELEASE(buf->base);
-}
-
-void on_new_connection(uv_stream_t *server, int status)
-{
-	if (status < 0) {
-		fprintf(stderr, "New connection error %s\n", uv_strerror(status));
-		// error!
+		hb_log_uv_error((int)nread);
+		uv_close((uv_handle_t *)req, NULL);
+		HB_MEM_RELEASE(buf->base);
 		return;
 	}
 
-	uv_udp_t *client = (uv_udp_t*)HB_MEM_ACQUIRE(sizeof(uv_udp_t));
-	uv_udp_init(uvu_loop, client);
-	if (uv_accept(server, (uv_stream_t*)client) == 0) {
-		uv_read_start((uv_stream_t*)client, alloc_buffer, echo_read);
+	char ipbuf[255];
+	uint16_t ipport = 0;
+	memset(&ipbuf, 0, sizeof(ipbuf));
+	if (addr->sa_family == AF_INET6) {
+		struct sockaddr_in6 *sockaddr = (struct sockaddr_in6 *)addr;
+		uv_ip6_name(sockaddr, ipbuf, sizeof(ipbuf));
+		ipport = sockaddr->sin6_port;
+	} else if (addr->sa_family == AF_INET) {
+		struct sockaddr_in *sockaddr = (struct sockaddr_in *)addr;
+		uv_ip4_name(sockaddr, ipbuf, sizeof(ipbuf));
+		ipport = sockaddr->sin_port;
 	} else {
-		uv_close((uv_handle_t*)client, on_close);
+		hb_log_error("Could not determine client IP");
+		return;
 	}
+	hb_log_info("Recv %zd from %s:%d\n", nread, ipbuf, ntohs(ipport));
+
+	uv_udp_send_t* send_req = HB_MEM_ACQUIRE(sizeof(*send_req));
+	uv_udp_send(send_req, uvu_udp_server, buf, 1, addr, echo_write);
 }
+
 
 int uvu_server_start(const char *ipstr, uint16_t port)
 {
@@ -108,15 +105,20 @@ int uvu_server_start(const char *ipstr, uint16_t port)
 	}
 
 	char ipbuf[255];
+	uint16_t ipport = 0;
 	memset(&ipbuf, 0, sizeof(ipbuf));
 	if (uvu_thread_priv->listen_addr.ss_family == AF_INET6) {
-		uv_ip6_name((struct sockaddr_in6 *)&uvu_thread_priv->listen_addr, ipbuf, sizeof(ipbuf));
+		struct sockaddr_in6 *sockaddr = (struct sockaddr_in6 *)&uvu_thread_priv->listen_addr;
+		uv_ip6_name(sockaddr, ipbuf, sizeof(ipbuf));
+		ipport = sockaddr->sin6_port;
 	} else if (uvu_thread_priv->listen_addr.ss_family == AF_INET) {
-		uv_ip4_name((struct sockaddr_in *)&uvu_thread_priv->listen_addr, ipbuf, sizeof(ipbuf));
+		struct sockaddr_in *sockaddr = (struct sockaddr_in *)&uvu_thread_priv->listen_addr;
+		uv_ip4_name(sockaddr, ipbuf, sizeof(ipbuf));
+		ipport = sockaddr->sin_port;
 	} else {
 		return 1;
 	}
-	printf("Listening on %s\n", ipbuf);
+	hb_log_info("Listening on %s:%d\n", ipbuf, ntohs(ipport));
 
 	if ((uvret = uv_thread_create(&uvu_thread, uvu_server_run, (void *)uvu_thread_priv))) {
 		return uvret;
@@ -270,18 +272,14 @@ void uvu_server_run(void *priv_data)
 		goto error;
 	}
 
-	//if ((uvret = uv_udp_nodelay(uvu_udp_server, 1))) {
-	//	hb_log_uv_error(uvret);
-	//	goto error;
-	//}
-
 	if ((uvret = uv_udp_bind(uvu_udp_server, (const struct sockaddr *)&thread_priv->listen_addr, 0))) {
 		hb_log_uv_error(uvret);
 		goto error;
 	}
 
-	if ((uvret = uv_listen((uv_stream_t *)uvu_udp_server, 1024, on_new_connection))) {
-		hb_log_uv_error(uvret);
+
+	if ((uvret = uv_udp_recv_start(uvu_udp_server, alloc_buffer, echo_read))) {
+		hb_log_uv_error(UV_ENOMEM);
 		goto error;
 	}
 
