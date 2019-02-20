@@ -149,8 +149,27 @@ AWS_STATIC_ASSERT(sizeof(char) == 1);
 
 #if defined(_MSC_VER)
 #    define AWS_THREAD_LOCAL __declspec(thread)
+#elif __APPLE__
+#	include <TargetConditionals.h>
+#	if TARGET_IPHONE_SIMULATOR
+#		define AWS_THREAD_LOCAL
+#	elif TARGET_OS_IPHONE
+#		define AWS_THREAD_LOCAL
+#	elif TARGET_OS_MAC
+#		define AWS_THREAD_LOCAL __thread
+#	else
+#   	error "Unknown Apple platform"
+#	endif
+#elif __ANDROID__
+#	define AWS_THREAD_LOCAL __thread
+#elif __linux__
+#	define AWS_THREAD_LOCAL __thread
+#elif __unix__ // all unices not caught above
+#	define AWS_THREAD_LOCAL __thread
+#elif defined(_POSIX_VERSION)
+#	define AWS_THREAD_LOCAL __thread
 #else
-#    define AWS_THREAD_LOCAL __thread
+#   error "Unknown compiler"
 #endif
 
 /* Allocator structure. An instance of this will be passed around for anything needing memory allocation */
