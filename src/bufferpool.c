@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 
+#include "udp/error.h"
 #include "udp/allocator.h"
 
 uint64_t hb_buffer_hash_key_fn(const void *key)
@@ -93,32 +94,32 @@ int hb_buffer_pool_populate(hb_buffer_pool_t *pool, void *rawmem, size_t block_s
 // --------------------------------------------------------------------------------------------------------------
 int hb_buffer_pool_setup(hb_buffer_pool_t *pool, void *rawmem, size_t block_size, size_t blocks)
 {
-	if (!pool) return EINVAL;
-	if (!pool->available) return EINVAL;
-	if (!pool->reserved) return EINVAL;
-	if (block_size <= 0) return EINVAL;
-	if (blocks <= 0) return EINVAL;
-	if (!rawmem) return EINVAL;
+	if (!pool) return HB_ERROR_INVAL;
+	if (!pool->available) return HB_ERROR_INVAL;
+	if (!pool->reserved) return HB_ERROR_INVAL;
+	if (block_size <= 0) return HB_ERROR_INVAL;
+	if (blocks <= 0) return HB_ERROR_INVAL;
+	if (!rawmem) return HB_ERROR_INVAL;
 
-	if (aws_atomic_load_int(&pool->state) != HB_BUFFER_POOL_NEW) return EINVAL;
+	if (aws_atomic_load_int(&pool->state) != HB_BUFFER_POOL_NEW) return HB_ERROR_INVAL;
 	aws_mutex_lock(&pool->mtx);
 	aws_atomic_store_int(&pool->state, HB_BUFFER_POOL_READY);
 
 	if (!(pool->buffers = HB_MEM_ACQUIRE(sizeof(hb_buffer_t) * blocks))) {
 		aws_mutex_unlock(&pool->mtx);
-		return ENOMEM;
+		return HB_ERROR_NOMEM;
 	}
 
 	aws_linked_list_init(pool->available);
 
 	if (aws_hash_table_init(pool->reserved, hb_default_allocator.priv, blocks, hb_buffer_hash_key_fn, hb_buffer_hash_eq_fn, NULL, NULL)) {
 		aws_mutex_unlock(&pool->mtx);
-		return ENOMEM;
+		return HB_ERROR_NOMEM;
 	}
 
 	if (hb_buffer_pool_populate(pool, rawmem, block_size, blocks)) {
 		aws_mutex_unlock(&pool->mtx);
-		return ENOMEM;
+		return HB_ERROR_NOMEM;
 	}
 
 	aws_mutex_unlock(&pool->mtx);
@@ -218,9 +219,9 @@ uint8_t *hb_buffer_pool_acquire(hb_buffer_pool_t *pool, uint64_t type)
 // --------------------------------------------------------------------------------------------------------------
 int hb_buffer_pool_release(hb_buffer_pool_t *pool, uint8_t *bufferdata)
 {
-	if (!pool) return EINVAL;
-	if (aws_atomic_load_int(&pool->state) != HB_BUFFER_POOL_READY) return EINVAL;
-	if (!bufferdata) return EINVAL;
+	if (!pool) return HB_ERROR_INVAL;
+	if (aws_atomic_load_int(&pool->state) != HB_BUFFER_POOL_READY) return HB_ERROR_INVAL;
+	if (!bufferdata) return HB_ERROR_INVAL;
 
 	hb_buffer_t *buffer;
 
@@ -236,8 +237,8 @@ int hb_buffer_pool_release(hb_buffer_pool_t *pool, uint8_t *bufferdata)
 // --------------------------------------------------------------------------------------------------------------
 int hb_buffer_pool_debug_print(hb_buffer_pool_t *pool)
 {
-	if (!pool) return EINVAL;
-	if (aws_atomic_load_int(&pool->state) != HB_BUFFER_POOL_READY) return EINVAL;
+	if (!pool) return HB_ERROR_INVAL;
+	if (aws_atomic_load_int(&pool->state) != HB_BUFFER_POOL_READY) return HB_ERROR_INVAL;
 
 	aws_mutex_lock(&pool->mtx);
 
