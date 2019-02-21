@@ -1,11 +1,35 @@
 cmake_minimum_required(VERSION 3.02)
 project(udp_in_ur_cornflakes LANGUAGES C CXX)
+set (CMAKE_CXX_STANDARD 11)
 set(UDP_LINK_LIBS "")
+set(UDP_LINK_TESTONLY_LIBS "")
 
+#
+# prep compile flags
 if (NOT WIN32)
 	set(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -fPIC")
 	set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -pie")
+else()
+	set(CompilerFlags
+        CMAKE_CXX_FLAGS
+        CMAKE_CXX_FLAGS_DEBUG
+        CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_C_FLAGS
+        CMAKE_C_FLAGS_DEBUG
+        CMAKE_C_FLAGS_RELEASE
+        )
+	foreach(CompilerFlag ${CompilerFlags})
+		string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
+	endforeach()
 endif()
+
+
+#
+# gtest / gmock dependency
+include_directories(${CMAKE_SOURCE_DIR}/deps/googletest/googlemock/include)
+include_directories(${CMAKE_SOURCE_DIR}/deps/googletest/googletest/include)
+add_subdirectory(${CMAKE_SOURCE_DIR}/deps/googletest)
+list(APPEND UDP_LINK_TESTONLY_LIBS gtest gtest_main gmock gmock_main)
 
 
 #
@@ -62,9 +86,8 @@ list(APPEND UDP_LINK_LIBS udp_in_ur_cornflakes)
 #
 # build test executables
 # TODO: make a cache variable to turn tests on/off
-add_executable(udp_test tests/test.c)
-target_link_libraries(udp_test ${UDP_LINK_LIBS})
-
+add_executable(udp_test tests/test.cpp)
+target_link_libraries(udp_test ${UDP_LINK_LIBS} ${UDP_LINK_TESTONLY_LIBS})
 
 
 #
