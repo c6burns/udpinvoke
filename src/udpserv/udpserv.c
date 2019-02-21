@@ -26,11 +26,12 @@ typedef struct {
 	uv_buf_t buf;
 } write_req_t;
 
-void free_write_req(uv_write_t *req)
+void free_write_req(uv_udp_send_t *req)
 {
-	write_req_t *wr = (write_req_t*)req;
-	HB_MEM_RELEASE(wr->buf.base);
-	HB_MEM_RELEASE(wr);
+	uv_buf_t *buf = (uv_buf_t*)req->data;
+	HB_MEM_RELEASE(buf->base);
+	HB_MEM_RELEASE(buf);
+	HB_MEM_RELEASE(req);
 }
 
 void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
@@ -49,37 +50,82 @@ void echo_write(uv_udp_send_t *req, int status)
 	if (status) {
 		hb_log_uv_error(status);
 	}
-	free_write_req((uv_write_t *)req);
+	free_write_req(req);
 }
 
-void echo_read(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags)
+void echo_read(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags)
 {
+	int ret;
+	uint8_t *msgbuf = NULL;
+	uv_udp_send_t *send_req = NULL;
+	uv_buf_t *sendbuf = NULL;
+
 	if (nread < 0) {
 		hb_log_uv_error((int)nread);
-		uv_close((uv_handle_t *)req, NULL);
-		HB_MEM_RELEASE(buf->base);
-		return;
+		goto close;
+	} else if (nread == 0) {
+		// this isn't an error, its an empty packet or other non error event with nothing to read
+		goto cleanup;
 	}
 
-	char ipbuf[255];
-	uint16_t ipport = 0;
-	memset(&ipbuf, 0, sizeof(ipbuf));
-	if (addr->sa_family == AF_INET6) {
-		struct sockaddr_in6 *sockaddr = (struct sockaddr_in6 *)addr;
-		uv_ip6_name(sockaddr, ipbuf, sizeof(ipbuf));
-		ipport = sockaddr->sin6_port;
-	} else if (addr->sa_family == AF_INET) {
-		struct sockaddr_in *sockaddr = (struct sockaddr_in *)addr;
-		uv_ip4_name(sockaddr, ipbuf, sizeof(ipbuf));
-		ipport = sockaddr->sin_port;
-	} else {
-		hb_log_error("Could not determine client IP");
-		return;
-	}
-	hb_log_info("Recv %zd from %s:%d\n", nread, ipbuf, ntohs(ipport));
+	//char ipbuf[255];
+	//uint16_t ipport = 0;
+	//memset(&ipbuf, 0, sizeof(ipbuf));
+	//if (addr->sa_family == AF_INET6) {
+	//	struct sockaddr_in6 *sockaddr = (struct sockaddr_in6 *)addr;
+	//	uv_ip6_name(sockaddr, ipbuf, sizeof(ipbuf));
+	//	ipport = sockaddr->sin6_port;
+	//} else if (addr->sa_family == AF_INET) {
+	//	struct sockaddr_in *sockaddr = (struct sockaddr_in *)addr;
+	//	uv_ip4_name(sockaddr, ipbuf, sizeof(ipbuf));
+	//	ipport = sockaddr->sin_port;
+	//} else {
+	//	hb_log_error("Could not determine client IP");
+	//	return;
+	//}
+	//hb_log_info("Recv %zd from %s:%d\n", nread, ipbuf, ntohs(ipport));
 
-	uv_udp_send_t* send_req = HB_MEM_ACQUIRE(sizeof(*send_req));
-	uv_udp_send(send_req, uvu_udp_server, buf, 1, addr, echo_write);
+	//uv_buf_t *sendbuf = HB_MEM_ACQUIRE(sizeof(*sendbuf));
+	//uint8_t *msgbuf = HB_MEM_ACQUIRE(nread);
+	//if (!sendbuf || !msgbuf) {
+	//	hb_log_uv_error(ENOMEM);
+	//	uv_close((uv_handle_t *)req, NULL);
+	//	return;
+	//}
+
+	//memcpy(msgbuf, buf->base, nread);
+	//sendbuf->base = msgbuf;
+	//sendbuf->len = UV_BUFLEN_CAST(nread);
+
+	msgbuf = HB_MEM_ACQUIRE(nread);
+	if (!msgbuf) {
+		hb_log_uv_error(ENOMEM);
+		goto close;
+	}
+	memcpy(msgbuf, buf, nread);
+
+	sendbuf = HB_MEM_ACQUIRE(sizeof(*sendbuf));
+	sendbuf->base = msgbuf;
+	sendbuf->len = UV_BUFLEN_CAST(nread);
+
+	send_req = HB_MEM_ACQUIRE(sizeof(*send_req));
+	send_req->data = sendbuf;
+	if ((ret = uv_udp_send(send_req, uvu_udp_server, sendbuf, 1, addr, echo_write))) {
+		hb_log_uv_error((int)nread);
+		goto close;
+	}
+
+	HB_MEM_RELEASE(buf->base);
+	return;
+
+close:
+	if (!uv_is_closing((uv_handle_t *)handle)) uv_close((uv_handle_t *)handle, on_close);
+
+cleanup:
+	HB_MEM_RELEASE(buf->base);
+	HB_MEM_RELEASE(msgbuf);
+	HB_MEM_RELEASE(sendbuf);
+	HB_MEM_RELEASE(send_req);
 }
 
 

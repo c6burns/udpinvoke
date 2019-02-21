@@ -140,7 +140,6 @@ void on_tick_cb(uv_timer_t *req)
 				do_connect = 1;
 			} else if (g_udp_conns[i].state == CS_CONNECTING) {
 				failed++;
-				do_send = 1;
 			} else if (g_udp_conns[i].state == CS_CONNECTED) {
 				connected++;
 				do_send = 1;
@@ -152,9 +151,13 @@ void on_tick_cb(uv_timer_t *req)
 				do_connect = 1;
 			}
 
-			if (do_connect && conns_made < conns_max) {
-				udp_connect_begin(&g_udp_conns[i], cmdline_args.host, cmdline_args.port);
-			} else if (do_send) {
+			//if (do_connect && conns_made < conns_max) {
+			//	udp_connect_begin(&g_udp_conns[i], cmdline_args.host, cmdline_args.port);
+			//} else if (do_send) {
+			//	udp_write_begin(g_udp_conns[i].udp, cmdline_args.message, cmdline_args.msglen, 0);
+			//}
+
+			if (do_send) {
 				udp_write_begin(g_udp_conns[i].udp, cmdline_args.message, cmdline_args.msglen, 0);
 			}
 			conns_made++;
@@ -266,7 +269,7 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 #else
-	cmdline_args.clients = 1;
+	cmdline_args.clients = 100;
 	cmdline_args.rate = 10;
 	cmdline_args.message = "I love eating potatoes :D";
 	cmdline_args.msglen = (int)strlen(cmdline_args.message);

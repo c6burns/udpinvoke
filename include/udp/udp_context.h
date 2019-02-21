@@ -12,6 +12,7 @@ typedef struct udp_ctx_config_s {
 } udp_ctx_config_t;
 
 typedef struct udp_ctx_s {
+	uv_loop_t *uv_loop;
 	udp_ctx_config_t *config;
 	uint64_t recv_msgs;
 	uint64_t recv_bytes;

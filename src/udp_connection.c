@@ -27,7 +27,7 @@ void on_udp_close_cb(uv_handle_t *handle)
 #endif
 
 	udp_conn_t *conn = (udp_conn_t *)handle->data;
-	HB_MEM_RELEASE(handle);
+	//HB_MEM_RELEASE(handle);
 	conn->state = CS_DISCONNECTED;
 	conn->udp = NULL;
 }
@@ -142,6 +142,7 @@ void on_udp_write_cb(uv_udp_send_t *req, int status)
 	if (status) {
 		hb_log_uv_error(status);
 		should_close = 1;
+	} else if (!wbuf->len) {
 	} else {
 		conn->ctx->send_msgs++;
 		conn->ctx->send_bytes += wbuf->len;
@@ -300,7 +301,7 @@ int udp_connect_begin(udp_conn_t *conn, const char *host, int port)
 	}
 
 	struct sockaddr_storage localaddr;
-	if ((ret = uv_ip4_addr(host, port, (struct sockaddr_in *)&localaddr))) {
+	if ((ret = uv_ip4_addr("0.0.0.0", 0, (struct sockaddr_in *)&localaddr))) {
 		hb_log_uv_error(ret);
 		return ret;
 	}
@@ -346,7 +347,7 @@ int udp_connect_begin(udp_conn_t *conn, const char *host, int port)
 #endif
 
 	connection->data = (void *)conn;
-	conn->state = CS_CONNECTING;
+	conn->state = CS_CONNECTED;
 	//if ((ret = uv_udp_connect(connection, socket, (const struct sockaddr *)&dest, on_udp_connect_cb))) {
 	//	hb_log_uv_error(ret);
 	//	conn->state = CS_DISCONNECTED;
