@@ -53,7 +53,7 @@ int hb_endpoint_set_ip6(hb_endpoint_t *endpoint, const char *ip, uint16_t port)
 }
 
 // --------------------------------------------------------------------------------------------------------------
-int hb_endpoint_convert(hb_endpoint_t *endpoint, struct sockaddr_storage *sockaddr)
+int hb_endpoint_convert(hb_endpoint_t *endpoint, hb_sockaddr_storage_t *sockaddr)
 {
-
+	return HB_SUCCESS;
 }

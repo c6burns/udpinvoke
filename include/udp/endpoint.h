@@ -60,6 +60,6 @@ typedef struct hb_endpoint_file_s {
 int hb_endpoint_get_string(hb_endpoint_t *endpoint, char *buf, int bufLen);
 int hb_endpoint_set_ip4(hb_endpoint_t *endpoint, const char *ip, uint16_t port);
 int hb_endpoint_set_ip6(hb_endpoint_t *endpoint, const char *ip, uint16_t port);
-int hb_endpoint_convert(hb_endpoint_t *endpoint, struct sockaddr_storage *sockaddr);
+int hb_endpoint_convert(hb_endpoint_t *endpoint, hb_sockaddr_storage_t *sockaddr);
 
 #endif
