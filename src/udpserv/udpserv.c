@@ -68,6 +68,10 @@ void echo_read(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf, const struc
 		goto cleanup;
 	}
 
+	if (flags & UV_UDP_PARTIAL) {
+		hb_log_warning("Recv was partial, buffers are likely full");
+	}
+
 	//char ipbuf[255];
 	//uint16_t ipport = 0;
 	//memset(&ipbuf, 0, sizeof(ipbuf));
@@ -318,7 +322,7 @@ void uvu_server_run(void *priv_data)
 		goto error;
 	}
 
-	if ((uvret = uv_udp_bind(uvu_udp_server, (const struct sockaddr *)&thread_priv->listen_addr, 0))) {
+	if ((uvret = uv_udp_bind(uvu_udp_server, (const struct sockaddr *)&thread_priv->listen_addr, UV_UDP_PARTIAL))) {
 		hb_log_uv_error(uvret);
 		goto error;
 	}

@@ -55,7 +55,7 @@ int parse_tcploadgen_args(int argc, const char **argv)
 		cmdline_args.clients = 1;
 	}
 
-	if (cmdline_args.rate <= 0) {
+	if (cmdline_args.rate < 0) {
 		cmdline_args.rate = 1;
 	}
 

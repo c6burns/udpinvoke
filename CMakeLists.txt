@@ -89,9 +89,12 @@ list(APPEND UDP_LINK_LIBS udp_in_ur_cornflakes)
 add_executable(udp_test tests/test.cpp)
 target_link_libraries(udp_test ${UDP_LINK_LIBS} ${UDP_LINK_TESTONLY_LIBS})
 
+add_executable(udp_uv_test tests/uv_test.c)
+target_link_libraries(udp_test ${UDP_LINK_LIBS} ${UDP_LINK_TESTONLY_LIBS})
+
 
 #
-# build tcploadgen executable
+# build udploadgen executable
 set(UDP_LOADGEN_SRCS
 	src/udplg/udplg.c
 	include/udplg/cmdargs.h
@@ -101,7 +104,7 @@ target_link_libraries(udplg ${UDP_LINK_LIBS})
 
 
 #
-# build tcpserver executable
+# build udpserver executable
 set(UDP_SERVER_SRCS
 	src/udpserv/udpserv.c
 	include/udpserv/udpserv.h

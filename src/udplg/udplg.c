@@ -63,7 +63,11 @@ struct sockaddr_storage g_sock_peer;
 
 
 // globals for operating the main timer callback
-float elapsed = 0;
+uint64_t start_ticks = 0;
+uint64_t current_ticks = 0;
+uint64_t transmit_ticks = 0;
+double elapsed = 0.0;
+
 char tty_data[1024];
 const char *space_str = "           ";
 const char *pend_str = "Pending Connections: ";
@@ -79,7 +83,18 @@ const char *dropped_str = "Dropped Connections: ";
 // --------------------------------------------------------------------------------------------------------------
 void on_tick_cb(uv_timer_t *req)
 {
-	elapsed += 0.2f;
+	if (!start_ticks) {
+		aws_sys_clock_get_ticks(&start_ticks);
+	}
+
+	aws_sys_clock_get_ticks(&current_ticks);
+	uint64_t tick_diff = (current_ticks - start_ticks);
+	if (tick_diff < transmit_ticks) {
+		return;
+	}
+	start_ticks = current_ticks;
+
+	elapsed += (double)tick_diff / (double)AWS_TIMESTAMP_NANOS;
 	uv_buf_t buf;
 	buf.base = tty_data;
 	size_t phase = g_appstate;
@@ -117,7 +132,7 @@ void on_tick_cb(uv_timer_t *req)
 		}
 
 		if (connected >= g_num_conns) {
-			elapsed = 0.f;
+			elapsed = 0.0;
 			g_appstate++;
 			printf("\n\nTransmitting Data =============================================\n\n\n\n\n");
 		} else {
@@ -157,7 +172,8 @@ void on_tick_cb(uv_timer_t *req)
 			//	udp_write_begin(g_udp_conns[i].udp, cmdline_args.message, cmdline_args.msglen, 0);
 			//}
 
-			if (do_send) {
+			//if (do_send) {
+			if (g_udp_conns[i].udp->send_queue_count < 2) {
 				udp_write_begin(g_udp_conns[i].udp, cmdline_args.message, cmdline_args.msglen, 0);
 			}
 			conns_made++;
@@ -171,19 +187,19 @@ void on_tick_cb(uv_timer_t *req)
 			rbytes_str, g_udp_ctx->recv_bytes, space_str);
 		uv_write(&g_write_req, (uv_stream_t*)&g_tty, &buf, 1, NULL);
 
-		if ((int)elapsed > cmdline_args.time) {
-			elapsed = 0.f;
+		if (elapsed > (double)cmdline_args.time) {
+			elapsed = 0.0;
 			g_appstate++;
 			g_failed = 0;
 			printf("\n\nWaiting for last messages =====================================\n");
 		}
 	} else if (phase == 3) {
-		if (elapsed > 2.f) {
+		if (elapsed > 2.0) {
 			for (int i = 0; i < g_num_conns; i++) {
 				udp_conn_disconnect(&g_udp_conns[i]);
 			}
 
-			elapsed = 0.f;
+			elapsed = 0.0;
 			g_appstate++;
 
 			printf("\n\nCleaning up ===================================================\n");
@@ -269,8 +285,8 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 #else
-	cmdline_args.clients = 100;
-	cmdline_args.rate = 10;
+	cmdline_args.clients = 1;
+	cmdline_args.rate = 0;
 	cmdline_args.message = "I love eating potatoes :D";
 	cmdline_args.msglen = (int)strlen(cmdline_args.message);
 	cmdline_args.prefix = 32;
@@ -290,6 +306,14 @@ int main(int argc, char **argv)
 		printf("message prefix: none\n");
 	}
 	printf("time: %d seconds\n", cmdline_args.time);
+
+
+	if (cmdline_args.rate == 0) {
+		transmit_ticks = 0;
+	} else {
+		transmit_ticks = AWS_TIMESTAMP_NANOS / cmdline_args.rate;
+	}
+
 
 	g_num_conns = cmdline_args.clients;
 	g_udp_conns = (udp_conn_t *)HB_MEM_ACQUIRE(sizeof(udp_conn_t) * g_num_conns);
@@ -319,7 +343,7 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	if ((ret = uv_timer_start(&g_ttytimer, on_tick_cb, 200, 200))) {
+	if ((ret = uv_timer_start(&g_ttytimer, on_tick_cb, 1, 1))) {
 		hb_log_uv_error(ret);
 		goto cleanup;
 	}
