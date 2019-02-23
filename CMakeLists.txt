@@ -56,6 +56,13 @@ list(APPEND UDP_LINK_LIBS aws-c-common)
 
 
 #
+# kcp dependency
+include_directories(${CMAKE_SOURCE_DIR}/deps/kcp)
+add_subdirectory(${CMAKE_SOURCE_DIR}/deps/kcp)
+list(APPEND UDP_LINK_LIBS kcp)
+
+
+#
 # build udp_in_ur_cornflakes library
 include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src)
 set(UDP_LIBRARY_SRCS
@@ -86,11 +93,11 @@ list(APPEND UDP_LINK_LIBS udp_in_ur_cornflakes)
 #
 # build test executables
 # TODO: make a cache variable to turn tests on/off
-add_executable(udp_test tests/test.cpp)
-target_link_libraries(udp_test ${UDP_LINK_LIBS} ${UDP_LINK_TESTONLY_LIBS})
+#add_executable(udp_test tests/test.cpp)
+#target_link_libraries(udp_test ${UDP_LINK_LIBS} ${UDP_LINK_TESTONLY_LIBS})
 
 add_executable(udp_uv_test tests/uv_test.c)
-target_link_libraries(udp_test ${UDP_LINK_LIBS} ${UDP_LINK_TESTONLY_LIBS})
+target_link_libraries(udp_uv_test ${UDP_LINK_LIBS} ${UDP_LINK_TESTONLY_LIBS})
 
 
 #

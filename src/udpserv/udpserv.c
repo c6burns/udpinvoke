@@ -11,9 +11,11 @@
 
 hb_buffer_pool_t *uvu_pool = NULL;
 uint8_t *uvu_pool_backing_store;
+uint64_t send_msgs = 0;
+uint64_t send_bytes = 0;
+uint64_t recv_msgs = 0;
+uint64_t recv_bytes = 0;
 
-//debug_memlist_t g_debug_memlist;
-//uvu_allocator_t g_debug_allocator;
 uvu_thread_private_t *uvu_thread_priv = NULL;
 uv_thread_t uvu_thread = (uv_thread_t)NULL;
 uv_loop_t *uvu_loop = NULL;
@@ -28,9 +30,7 @@ typedef struct {
 
 void free_write_req(uv_udp_send_t *req)
 {
-	uv_buf_t *buf = (uv_buf_t*)req->data;
-	HB_MEM_RELEASE(buf->base);
-	HB_MEM_RELEASE(buf);
+	HB_MEM_RELEASE(req->data);
 	HB_MEM_RELEASE(req);
 }
 
@@ -56,9 +56,7 @@ void echo_write(uv_udp_send_t *req, int status)
 void echo_read(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf, const struct sockaddr *addr, unsigned flags)
 {
 	int ret;
-	uint8_t *msgbuf = NULL;
 	uv_udp_send_t *send_req = NULL;
-	uv_buf_t *sendbuf = NULL;
 
 	if (nread < 0) {
 		hb_log_uv_error((int)nread);
@@ -72,54 +70,17 @@ void echo_read(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf, const struc
 		hb_log_warning("Recv was partial, buffers are likely full");
 	}
 
-	//char ipbuf[255];
-	//uint16_t ipport = 0;
-	//memset(&ipbuf, 0, sizeof(ipbuf));
-	//if (addr->sa_family == AF_INET6) {
-	//	struct sockaddr_in6 *sockaddr = (struct sockaddr_in6 *)addr;
-	//	uv_ip6_name(sockaddr, ipbuf, sizeof(ipbuf));
-	//	ipport = sockaddr->sin6_port;
-	//} else if (addr->sa_family == AF_INET) {
-	//	struct sockaddr_in *sockaddr = (struct sockaddr_in *)addr;
-	//	uv_ip4_name(sockaddr, ipbuf, sizeof(ipbuf));
-	//	ipport = sockaddr->sin_port;
-	//} else {
-	//	hb_log_error("Could not determine client IP");
-	//	return;
-	//}
-	//hb_log_info("Recv %zd from %s:%d\n", nread, ipbuf, ntohs(ipport));
+	recv_msgs++;
+	recv_bytes += nread;
 
-	//uv_buf_t *sendbuf = HB_MEM_ACQUIRE(sizeof(*sendbuf));
-	//uint8_t *msgbuf = HB_MEM_ACQUIRE(nread);
-	//if (!sendbuf || !msgbuf) {
-	//	hb_log_uv_error(ENOMEM);
-	//	uv_close((uv_handle_t *)req, NULL);
-	//	return;
-	//}
-
-	//memcpy(msgbuf, buf->base, nread);
-	//sendbuf->base = msgbuf;
-	//sendbuf->len = UV_BUFLEN_CAST(nread);
-
-	msgbuf = HB_MEM_ACQUIRE(nread);
-	if (!msgbuf) {
-		hb_log_uv_error(ENOMEM);
-		goto close;
-	}
-	memcpy(msgbuf, buf, nread);
-
-	sendbuf = HB_MEM_ACQUIRE(sizeof(*sendbuf));
-	sendbuf->base = msgbuf;
-	sendbuf->len = UV_BUFLEN_CAST(nread);
-
+	uv_buf_t sendbuf = uv_buf_init(buf->base, nread);
 	send_req = HB_MEM_ACQUIRE(sizeof(*send_req));
-	send_req->data = sendbuf;
-	if ((ret = uv_udp_send(send_req, uvu_udp_server, sendbuf, 1, addr, echo_write))) {
+	send_req->data = buf->base;
+	if ((ret = uv_udp_send(send_req, uvu_udp_server, &sendbuf, 1, addr, echo_write))) {
 		hb_log_uv_error((int)nread);
 		goto close;
 	}
 
-	HB_MEM_RELEASE(buf->base);
 	return;
 
 close:
@@ -127,8 +88,6 @@ close:
 
 cleanup:
 	HB_MEM_RELEASE(buf->base);
-	HB_MEM_RELEASE(msgbuf);
-	HB_MEM_RELEASE(sendbuf);
 	HB_MEM_RELEASE(send_req);
 }
 
@@ -246,8 +205,8 @@ void shutdown_walk_cb(uv_handle_t* handle, void* arg)
 
 void uvu_server_run_cleanup()
 {
-	//if (uvu_accept_timer) HB_MEM_RELEASE(uvu_accept_timer);
-	//if (uvu_udp_server) HB_MEM_RELEASE(uvu_udp_server);
+	if (uvu_accept_timer) HB_MEM_RELEASE(uvu_accept_timer);
+	if (uvu_udp_server) HB_MEM_RELEASE(uvu_udp_server);
 	if (uvu_loop) HB_MEM_RELEASE(uvu_loop);
 	if (uvu_pool) {
 		hb_buffer_pool_cleanup(uvu_pool);
@@ -351,6 +310,9 @@ void uvu_server_run(void *priv_data)
 	//	hb_log_uv_error(uvret);
 	//	goto error;
 	//}
+
+	hb_log_info("Send: %zu -- %zu\n\n", send_msgs, send_bytes);
+	hb_log_info("Recv: %zu -- %zu\n\n", recv_msgs, recv_bytes);
 
 	uvu_server_run_cleanup();
 	return;
